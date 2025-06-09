@@ -30,9 +30,12 @@ def draw_spectrum(rightx, righty, leftx, lefty, image, color=(255, 0, 0), width=
 	y_base = int(round(lefty * image.shape[0]))
 	x_end = int(round(rightx * image.shape[1]))
 
+
 	dist_y = (righty - lefty)
 	dist_z = (rightx - leftx)
 	theta = np.arctan2(dist_z, dist_y)
+
+	print(f"dist_y: {dist_y}, dist_z: {dist_z}, theta: {theta}")
 
 	# Calculate the interval between bars
 	if num_bars > 1:
@@ -40,9 +43,9 @@ def draw_spectrum(rightx, righty, leftx, lefty, image, color=(255, 0, 0), width=
 	else:
 		interval = 0
 
-	print(f"Interval: {interval}, Spectrum length: {num_bars}")
-
 	for i in range(num_bars):
+		hsv_color = np.uint8([[[i, 160, 255]]])
+		bgr_color = cv2.cvtColor(hsv_color, cv2.COLOR_HSV2BGR)[0][0].tolist()
 		x = int(round(x_start + i * interval))
 		y = y_base
 		bar_height = int(round(spectrum_compressed[i])**2*0.0002)
@@ -51,9 +54,9 @@ def draw_spectrum(rightx, righty, leftx, lefty, image, color=(255, 0, 0), width=
 		if 0 <= x < image.shape[1]:
 			# Create an overlay
 			overlay = image.copy()
-			prime_z = int((interval * i)/(dist_z/dist_y + 0.000001))
-			cv2.line(overlay, (x, y+prime_z), (x, y2+prime_z), (120, i+i/2, i//2), width)
-			cv2.line(overlay, (x, y+prime_z), (x, invy2+prime_z), (120, i+i/2, i//2), width)
+			prime_z = int((interval * i)/(dist_z/(dist_y + 0.000001)))
+			cv2.line(overlay, (x, y+prime_z), (x, y2+prime_z), bgr_color, width)
+			cv2.line(overlay, (x, y+prime_z), (x, invy2+prime_z), bgr_color, width)
 			# Blend overlay with the original image (alpha=0.3 for transparency)
 			alpha = 0.6
 			image[:] = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
@@ -105,6 +108,11 @@ with mp_hands.Hands(
 			# If loading a video, use 'break' instead of 'continue'.
 			continue
 
+		image_flipped = cv2.flip(image, 1)
+		cv2.putText(image_flipped, f"Now Playing: {playlist[track%len(playlist)]}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 173, 101), 2)
+		# Flip back to original orientation
+		image = cv2.flip(image_flipped, 1)
+
 		# To improve performance, optionally mark the image as not writeable to
 		# pass by reference.
 		image.flags.writeable = False
@@ -114,7 +122,6 @@ with mp_hands.Hands(
 		# Draw the hand annotations on the image.
 		image.flags.writeable = True
 		image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-		# cv2.addText(image,str(track), (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 		if results.multi_hand_landmarks:
 			for i,hand_landmarks in enumerate(results.multi_hand_landmarks):
 				# mp_drawing.draw_landmarks(
@@ -148,8 +155,8 @@ with mp_hands.Hands(
 					draw_spectrum((right_index.x+right_thumb.x)/2, (right_index.y+right_thumb.y)/2,
 				    (left_index.x+left_thumb.x)/2, (left_index.y+left_thumb.y)/2, image, spectrum=spectrum)
 
-				draw_handline(right_index.x, right_index.y, right_thumb.x, right_thumb.y, image)
-				draw_handline(left_index.x, left_index.y, left_thumb.x, left_thumb.y, image)
+				draw_handline(right_index.x, right_index.y, right_thumb.x, right_thumb.y, image, color=(255, 50, 50))
+				draw_handline(left_index.x, left_index.y, left_thumb.x, left_thumb.y, image, color=(50, 50, 255))
 
 				dist_left = np.sqrt((left_index.x-left_thumb.x)**2+(left_index.y-left_thumb.y)**2)
 				pitch.transpo = float(dist_left)*5
@@ -160,13 +167,13 @@ with mp_hands.Hands(
 				if left_index.y> left_thumb.y:
 					amp.stop()
 					track += 1
-					sf, pitch, amp = create_chain(f"audios/{playlist[track]}")
+					sf, pitch, amp = create_chain(f"audios/{playlist[track%len(playlist)]}")
 					time.sleep(0.7)
 
 				if right_index.y> right_thumb.y:
 					amp.stop()
 					track += -1
-					sf, pitch, amp = create_chain(f"audios/{playlist[track]}")
+					sf, pitch, amp = create_chain(f"audios/{playlist[track%len(playlist)]}")
 					time.sleep(0.7)
 					
 		# Flip the image horizontally for a selfie-view display.
