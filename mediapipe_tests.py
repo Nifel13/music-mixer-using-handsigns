@@ -4,14 +4,11 @@ from playsound import playsound
 import os
 from pyo import *
 import numpy as np
+from spectrum_analyzer import SimpleSpectrumAnalyzer
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_hands = mp.solutions.hands
-
-sound_folder = "audios"
-song_filename = "drugs.wav"  
-song_path = os.path.join(sound_folder, song_filename)
 
 # functions outside of mainloop
 
@@ -19,7 +16,48 @@ def draw_handline(rightx,righty, leftx, lefty, image, color = (255,0,0), width =
 	cv2.line(image, (int(leftx * image.shape[1]), int(lefty * image.shape[0])),
 						 (int(rightx * image.shape[1]), int(righty * image.shape[0])),
 						 color, width)
-	
+
+def draw_spectrum(rightx, righty, leftx, lefty, image, color=(255, 0, 0), width=2, spectrum=None, compression_factor=4):
+	if spectrum is None or len(spectrum) == 0:
+		return
+
+	# Correct distance calculation
+	spectrum_compressed = spectrum[::compression_factor]
+	num_bars = len(spectrum_compressed)
+
+    # Calculate start and end pixel positions
+	x_start = int(round(leftx * image.shape[1]))
+	y_base = int(round(lefty * image.shape[0]))
+	x_end = int(round(rightx * image.shape[1]))
+
+	dist_y = (righty - lefty)
+	dist_z = (rightx - leftx)
+	theta = np.arctan2(dist_z, dist_y)
+
+	# Calculate the interval between bars
+	if num_bars > 1:
+		interval = (x_end - x_start) / (num_bars - 1)
+	else:
+		interval = 0
+
+	print(f"Interval: {interval}, Spectrum length: {num_bars}")
+
+	for i in range(num_bars):
+		x = int(round(x_start + i * interval))
+		y = y_base
+		bar_height = int(round(spectrum_compressed[i])**2*0.0002)
+		y2 = max(0, y - bar_height)
+		invy2 = min(image.shape[0], y + bar_height)
+		if 0 <= x < image.shape[1]:
+			# Create an overlay
+			overlay = image.copy()
+			prime_z = int((interval * i)/(dist_z/dist_y + 0.000001))
+			cv2.line(overlay, (x, y+prime_z), (x, y2+prime_z), (120, i+i/2, i//2), width)
+			cv2.line(overlay, (x, y+prime_z), (x, invy2+prime_z), (120, i+i/2, i//2), width)
+			# Blend overlay with the original image (alpha=0.3 for transparency)
+			alpha = 0.6
+			image[:] = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
+
 
 s = Server().boot()
 s.start()
@@ -51,6 +89,9 @@ right_thumb = None
 
 sf, pitch, amp = create_chain(f"audios/{playlist[track]}")
 
+# Create analyzer
+analyzer = SimpleSpectrumAnalyzer(sf)
+analyzer.start()
 # For webcam input:
 cap = cv2.VideoCapture(0)
 with mp_hands.Hands(
@@ -73,6 +114,7 @@ with mp_hands.Hands(
 		# Draw the hand annotations on the image.
 		image.flags.writeable = True
 		image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+		# cv2.addText(image,str(track), (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 		if results.multi_hand_landmarks:
 			for i,hand_landmarks in enumerate(results.multi_hand_landmarks):
 				# mp_drawing.draw_landmarks(
@@ -93,14 +135,19 @@ with mp_hands.Hands(
 					right_thumb = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
 					
 			if left_index and right_index:
-				draw_handline((right_index.x+right_thumb.x)/2, (right_index.y+right_thumb.y)/2,
-				    (left_index.x+left_thumb.x)/2, (left_index.y+left_thumb.y)/2, image)
+				# draw_handline((right_index.x+right_thumb.x)/2, (right_index.y+right_thumb.y)/2,
+				#     (left_index.x+left_thumb.x)/2, (left_index.y+left_thumb.y)/2, image)
 				
 				dist_index = np.sqrt((right_index.x-left_index.x)**2+(right_index.y-left_index.y)**2)
-				print(dist_index)
 				vol.value = float(dist_index)
 
 			if left_thumb and right_thumb:
+
+				spectrum = analyzer.get_spectrum()  # List of floats
+				if spectrum is not None:
+					draw_spectrum((right_index.x+right_thumb.x)/2, (right_index.y+right_thumb.y)/2,
+				    (left_index.x+left_thumb.x)/2, (left_index.y+left_thumb.y)/2, image, spectrum=spectrum)
+
 				draw_handline(right_index.x, right_index.y, right_thumb.x, right_thumb.y, image)
 				draw_handline(left_index.x, left_index.y, left_thumb.x, left_thumb.y, image)
 
