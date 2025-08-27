@@ -1,6 +1,5 @@
 import cv2
 import mediapipe as mp
-from playsound import playsound
 import os
 from pyo import *
 import numpy as np
@@ -35,7 +34,7 @@ def draw_spectrum(rightx, righty, leftx, lefty, image, color=(255, 0, 0), width=
 	dist_z = (rightx - leftx)
 	theta = np.arctan2(dist_z, dist_y)
 
-	print(f"dist_y: {dist_y}, dist_z: {dist_z}, theta: {theta}")
+	# print(f"dist_y: {dist_y}, dist_z: {dist_z}, theta: {theta}")
 
 	# Calculate the interval between bars
 	if num_bars > 1:
@@ -104,7 +103,7 @@ with mp_hands.Hands(
 	while cap.isOpened():
 		success, image = cap.read()
 		if not success:
-			print("Ignoring empty camera frame.")
+			# print("Ignoring empty camera frame.")
 			# If loading a video, use 'break' instead of 'continue'.
 			continue
 
